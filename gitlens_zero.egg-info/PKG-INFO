@@ -1,3 +1,12 @@
+Metadata-Version: 2.4
+Name: gitlens-zero
+Version: 0.1.0
+Summary: Zero-dependency Git history analyzer
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
 # GitLens Zero
 
 GitLens Zero is a zero-dependency Python CLI that inspects a Git repository and turns commit history into clear, human-readable project insights. The application uses Git on the command line and Python's standard library only, so it stays compliant with the Zero Dependency Hackathon requirement.

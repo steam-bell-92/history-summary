@@ -1,0 +1,2 @@
+[console_scripts]
+gitlens = src.main:main
