@@ -5,6 +5,18 @@ from typing import Any
 
 
 @dataclass(slots=True)
+class FileChange:
+    """Represents a single file-level change captured from Git."""
+
+    path: str
+    old_path: str | None = None
+    status: str = "M"
+    additions: int = 0
+    deletions: int = 0
+    is_binary: bool = False
+
+
+@dataclass(slots=True)
 class Commit:
     """Represents a single git commit extracted from repository history."""
 
@@ -16,6 +28,7 @@ class Commit:
     insertions: int = 0
     deletions: int = 0
     diff: str = ""
+    changes: list[FileChange] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -27,6 +40,7 @@ class AnalysisResult:
     categories: dict[str, int] = field(default_factory=dict)
     hotspots: dict[str, int] = field(default_factory=dict)
     impact_score: int = 0
+    impact_reasons: list[str] = field(default_factory=list)
     summary: str = ""
     impacts: list[str] = field(default_factory=list)
     commits: list[Commit] = field(default_factory=list)
@@ -39,6 +53,7 @@ class AnalysisResult:
             "categories": self.categories,
             "hotspots": self.hotspots,
             "impact_score": self.impact_score,
+            "impact_reasons": self.impact_reasons,
             "summary": self.summary,
             "impacts": self.impacts,
         }

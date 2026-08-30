@@ -3,11 +3,18 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-from .models import Commit
+from .models import Commit, FileChange
+
+
+RECORD_SEPARATOR = "\x1e"
+FIELD_SEPARATOR = "\x1f"
 
 
 def parse_git_log_output(output: str) -> list[Commit]:
     """Parse raw git log output into a list of Commit objects."""
+    if FIELD_SEPARATOR in output or RECORD_SEPARATOR in output:
+        return parse_structured_git_log_output(output)
+
     blocks: list[str] = split_commit_blocks(output)
     commits: list[Commit] = []
 
@@ -16,6 +23,27 @@ def parse_git_log_output(output: str) -> list[Commit]:
         if commit is not None:
             commits.append(commit)
 
+    return commits
+
+
+def parse_structured_git_log_output(output: str) -> list[Commit]:
+    """Parse machine-readable git log output into commit objects."""
+    commits: list[Commit] = []
+    for record in output.split(RECORD_SEPARATOR):
+        record = record.strip("\n\r\t ")
+        if not record:
+            continue
+        fields = record.split(FIELD_SEPARATOR)
+        if len(fields) < 4:
+            continue
+        commits.append(
+            Commit(
+                hash=fields[0].strip() or "unknown",
+                author=fields[1].strip() or "Unknown",
+                date=fields[2].strip() or "unknown",
+                message=fields[3].strip() or "untitled commit",
+            )
+        )
     return commits
 
 
@@ -79,6 +107,106 @@ def extract_message(block: str) -> str:
             return stripped.strip()
         return stripped
     return "untitled commit"
+
+
+def parse_name_status_output(output: str) -> list[FileChange]:
+    """Parse `git diff-tree --name-status -z` output into file changes."""
+    tokens = [token for token in output.split("\0") if token]
+    changes: list[FileChange] = []
+    index = 0
+
+    while index < len(tokens):
+        status = tokens[index].strip()
+        index += 1
+        if not status:
+            continue
+
+        if status.startswith(("R", "C")):
+            if index + 1 >= len(tokens):
+                break
+            old_path = tokens[index]
+            new_path = tokens[index + 1]
+            index += 2
+            changes.append(FileChange(path=new_path, old_path=old_path, status=status))
+            continue
+
+        if index >= len(tokens):
+            break
+        path = tokens[index]
+        index += 1
+        changes.append(FileChange(path=path, status=status))
+
+    return changes
+
+
+def parse_numstat_output(output: str) -> list[FileChange]:
+    """Parse `git diff-tree --numstat -z` output into file changes."""
+    tokens = [token for token in output.split("\0") if token]
+    changes: list[FileChange] = []
+    index = 0
+
+    while index < len(tokens):
+        record = tokens[index]
+        index += 1
+        parts = record.split("\t")
+        if len(parts) < 2:
+            continue
+
+        additions = parse_numstat_value(parts[0])
+        deletions = parse_numstat_value(parts[1])
+
+        if len(parts) >= 3 and parts[2]:
+            path = "\t".join(parts[2:])
+            changes.append(FileChange(path=path, additions=additions, deletions=deletions, is_binary=additions < 0 or deletions < 0))
+            continue
+
+        if index + 1 > len(tokens):
+            break
+        old_path = tokens[index] if index < len(tokens) else ""
+        new_path = tokens[index + 1] if index + 1 < len(tokens) else old_path
+        index += 2
+        changes.append(
+            FileChange(
+                path=new_path or old_path,
+                old_path=old_path or None,
+                additions=additions,
+                deletions=deletions,
+                is_binary=additions < 0 or deletions < 0,
+            )
+        )
+
+    return changes
+
+
+def parse_numstat_value(value: str) -> int:
+    """Convert a numstat field into an integer, preserving binary markers."""
+    if value == "-":
+        return -1
+    try:
+        return int(value)
+    except ValueError:
+        return 0
+
+
+def merge_file_changes(name_status_changes: list[FileChange], numstat_changes: list[FileChange]) -> list[FileChange]:
+    """Merge structured name-status and numstat records into a single change list."""
+    merged: list[FileChange] = []
+    for index, name_change in enumerate(name_status_changes):
+        numstat_change = numstat_changes[index] if index < len(numstat_changes) else None
+        additions = numstat_change.additions if numstat_change is not None else 0
+        deletions = numstat_change.deletions if numstat_change is not None else 0
+        is_binary = numstat_change.is_binary if numstat_change is not None else False
+        merged.append(
+            FileChange(
+                path=name_change.path,
+                old_path=name_change.old_path,
+                status=name_change.status,
+                additions=additions,
+                deletions=deletions,
+                is_binary=is_binary,
+            )
+        )
+    return merged
 
 
 def extract_number(text: str, pattern: str) -> int:

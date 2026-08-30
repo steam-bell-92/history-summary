@@ -1,19 +1,10 @@
 import unittest
 
-from src.parser import parse_git_log_output
+from src.parser import merge_file_changes, parse_git_log_output, parse_name_status_output, parse_numstat_output
 
 
 LOG_OUTPUT = '''
-commit 1234567890abcdef
-Author: Alice <alice@example.com>
-Date:   2026-08-01 12:00:00 +0000
-
-    feat(auth): add JWT validation
-
-    src/auth.py | 12 ++++++
-    src/api.py  | 4 +--
-    2 files changed, 12 insertions(+), 4 deletions(-)
-
+1234567890abcdef\x1fAlice\x1f2026-08-01T12:00:00+00:00\x1ffeat(auth): add JWT validation\x1e
 '''
 
 
@@ -23,9 +14,19 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(len(commits), 1)
         self.assertEqual(commits[0].author, "Alice")
         self.assertEqual(commits[0].message, "feat(auth): add JWT validation")
-        self.assertEqual(commits[0].files_changed, 2)
-        self.assertEqual(commits[0].insertions, 12)
-        self.assertEqual(commits[0].deletions, 4)
+
+    def test_parse_structured_file_changes(self):
+        name_status = "R100\0src/old name.py\0src/new name.py\0D\0docs/readme.md\0M\0assets/binary.bin\0"
+        numstat = "0\t0\0src/old name.py\0src/new name.py\00\t1\tdocs/readme.md\0-\t-\tassets/binary.bin\0"
+
+        merged = merge_file_changes(parse_name_status_output(name_status), parse_numstat_output(numstat))
+
+        self.assertEqual(len(merged), 3)
+        self.assertEqual(merged[0].old_path, "src/old name.py")
+        self.assertEqual(merged[0].path, "src/new name.py")
+        self.assertEqual(merged[1].status, "D")
+        self.assertEqual(merged[1].deletions, 1)
+        self.assertTrue(merged[2].is_binary)
 
 
 if __name__ == "__main__":

@@ -60,6 +60,8 @@ def generate_html_report(result: AnalysisResult) -> str:
       <h2>Executive Summary</h2>
       <div class=\"card summary\">{html_lib.escape(result.summary)}</div>
     </div>
+        <h3>Scoring Notes</h3>
+        <ul>{''.join(f'<li>{html_lib.escape(item)}</li>' for item in result.impact_reasons)}</ul>
 
     <div class=\"section\">
       <h2>Contributor Table</h2>
@@ -95,6 +97,8 @@ def generate_html_report(result: AnalysisResult) -> str:
       <h2>Impact Analysis</h2>
       <div class=\"card\">
         <ul>{''.join(f'<li>{html_lib.escape(item)}</li>' for item in result.impacts)}</ul>
+        <h3>Scoring Notes</h3>
+        <ul>{''.join(f'<li>{html_lib.escape(item)}</li>' for item in result.impact_reasons)}</ul>
       </div>
     </div>
   </div>

@@ -37,18 +37,20 @@ def parse_file_hotspots(diff_text: str) -> list[str]:
     seen: set[str] = set()
 
     for line in diff_text.splitlines():
-        match = re.search(r"^(?:diff --git a/|--- a/|\+\+\+ b/)(.+)$", line)
-        if match:
+        if line.startswith("diff --git "):
+            parts = line.split()
+            if len(parts) >= 4:
+                file_name = parts[3].removeprefix("b/")
+            else:
+                continue
+        else:
+            match = re.search(r"^(?:--- a/|\+\+\+ b/)(.+)$", line)
+            if not match:
+                continue
             file_name = match.group(1).strip()
             if file_name and file_name not in seen:
                 files.append(file_name)
                 seen.add(file_name)
-
-    for line in diff_text.splitlines():
-        if line.startswith("index "):
-            continue
-        if line.startswith("diff --git "):
-            continue
 
     return files
 

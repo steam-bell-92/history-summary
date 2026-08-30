@@ -89,8 +89,10 @@ def format_stats_output(result) -> str:
     """Format a compact statistics summary."""
     total_additions = sum(commit.insertions for commit in result.commits)
     total_deletions = sum(commit.deletions for commit in result.commits)
+    total_files_changed = sum(commit.files_changed for commit in result.commits)
     lines = [
         f"Total commits: {result.commit_count}",
+        f"Files changed: {total_files_changed}",
         f"Additions: {total_additions}",
         f"Deletions: {total_deletions}",
         f"Contributors: {len(result.contributors)}",
