@@ -47,6 +47,32 @@ class GitEngineIntegrationTests(unittest.TestCase):
             self.assertIn("hello renamed.txt", analysis.hotspots)
             self.assertIn("new file.py", analysis.hotspots)
 
+    def test_invalid_revision_range_raises_instead_of_falling_back(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            self.run_git(repo, "init")
+            self.run_git(repo, "config", "user.email", "test@example.com")
+            self.run_git(repo, "config", "user.name", "Test User")
+
+            (repo / "file.txt").write_text("content\n", encoding="utf-8")
+            self.run_git(repo, "add", ".")
+            self.run_git(repo, "commit", "-m", "initial")
+
+            with self.assertRaises(RuntimeError):
+                build_analysis(repo, "not-a-ref..HEAD")
+
+    def test_empty_repository_returns_empty_analysis(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            self.run_git(repo, "init")
+            self.run_git(repo, "config", "user.email", "test@example.com")
+            self.run_git(repo, "config", "user.name", "Test User")
+
+            analysis = build_analysis(repo, "HEAD")
+
+            self.assertEqual(analysis.commit_count, 0)
+            self.assertEqual(analysis.summary, "No commit history is available for the selected range.")
+
 
 class ImpactDetectionTests(unittest.TestCase):
     def test_unrelated_filename_does_not_trigger_authentication(self):

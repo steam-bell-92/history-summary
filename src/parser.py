@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
 from typing import Iterable
 
 from .models import Commit, FileChange
@@ -157,7 +158,14 @@ def parse_numstat_output(output: str) -> list[FileChange]:
 
         if len(parts) >= 3 and parts[2]:
             path = "\t".join(parts[2:])
-            changes.append(FileChange(path=path, additions=additions, deletions=deletions, is_binary=additions < 0 or deletions < 0))
+            changes.append(
+                FileChange(
+                    path=path,
+                    additions=additions,
+                    deletions=deletions,
+                    is_binary=additions < 0 or deletions < 0,
+                )
+            )
             continue
 
         if index + 1 > len(tokens):
@@ -189,24 +197,38 @@ def parse_numstat_value(value: str) -> int:
 
 
 def merge_file_changes(name_status_changes: list[FileChange], numstat_changes: list[FileChange]) -> list[FileChange]:
-    """Merge structured name-status and numstat records into a single change list."""
-    merged: list[FileChange] = []
-    for index, name_change in enumerate(name_status_changes):
-        numstat_change = numstat_changes[index] if index < len(numstat_changes) else None
-        additions = numstat_change.additions if numstat_change is not None else 0
-        deletions = numstat_change.deletions if numstat_change is not None else 0
-        is_binary = numstat_change.is_binary if numstat_change is not None else False
-        merged.append(
-            FileChange(
-                path=name_change.path,
-                old_path=name_change.old_path,
-                status=name_change.status,
-                additions=additions,
-                deletions=deletions,
-                is_binary=is_binary,
-            )
+    """Merge structured name-status and numstat records by file path."""
+    merged: OrderedDict[tuple[str | None, str], FileChange] = OrderedDict()
+
+    for change in name_status_changes:
+        key = (change.old_path, change.path)
+        merged[key] = FileChange(
+            path=change.path,
+            old_path=change.old_path,
+            status=change.status,
+            additions=change.additions,
+            deletions=change.deletions,
+            is_binary=change.is_binary,
         )
-    return merged
+
+    for change in numstat_changes:
+        key = (change.old_path, change.path)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = FileChange(
+                path=change.path,
+                old_path=change.old_path,
+                status=change.status,
+                additions=change.additions,
+                deletions=change.deletions,
+                is_binary=change.is_binary,
+            )
+            continue
+        existing.additions = change.additions
+        existing.deletions = change.deletions
+        existing.is_binary = change.is_binary
+
+    return list(merged.values())
 
 
 def extract_number(text: str, pattern: str) -> int:

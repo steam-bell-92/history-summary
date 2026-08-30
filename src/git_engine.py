@@ -17,12 +17,13 @@ def get_commit_range(repo_path: str | Path, range_spec: str) -> list[Commit]:
     git_format = "--pretty=format:%H%x1f%an%x1f%ad%x1f%s%x1e"
 
     try:
-        output = run_git_command(repo, ["log", git_format, "--date=iso-strict", "--reverse", range_spec])
+        commit_count = run_git_command(repo, ["rev-list", "--count", "--all"]).strip()
     except RuntimeError:
-        try:
-            output = run_git_command(repo, ["log", git_format, "--date=iso-strict", "--reverse", "-n", "20"])
-        except RuntimeError:
-            return []
+        raise
+    if commit_count == "0":
+        return []
+
+    output = run_git_command(repo, ["log", git_format, "--date=iso-strict", "--reverse", range_spec])
 
     commits = parse_git_log_output(output)
     return commits
@@ -31,9 +32,12 @@ def get_commit_range(repo_path: str | Path, range_spec: str) -> list[Commit]:
 def build_analysis(repo_path: str | Path, range_spec: str) -> AnalysisResult:
     """Analyze a commit range and produce project insight data."""
     commits = get_commit_range(repo_path, range_spec)
+    repo = normalize_repo_path(str(repo_path))
     if not commits:
         return AnalysisResult(
             commit_count=0,
+            revision_range=range_spec,
+            repository=str(repo),
             contributors=[],
             categories={},
             hotspots={},
@@ -67,6 +71,8 @@ def build_analysis(repo_path: str | Path, range_spec: str) -> AnalysisResult:
 
     analysis = AnalysisResult(
         commit_count=len(commits),
+        revision_range=range_spec,
+        repository=str(repo),
         contributors=contributors,
         categories=dict(categories),
         hotspots=dict(hotspots),
@@ -86,13 +92,18 @@ def get_commit_changes(repo_path: str | Path, revision: str) -> list:
     try:
         name_status = run_git_command(
             repo,
-            ["diff-tree", "--root", "--no-commit-id", "-r", "-M", "-C", "--first-parent", "-z", "--name-status", revision],
+            ["diff-tree", "--root", "--no-commit-id", "-r", "-m", "-M", "-C", "-z", "--name-status", revision],
         )
         numstat = run_git_command(
             repo,
-            ["diff-tree", "--root", "--no-commit-id", "-r", "-M", "-C", "--first-parent", "-z", "--numstat", revision],
+            ["diff-tree", "--root", "--no-commit-id", "-r", "-m", "-M", "-C", "-z", "--numstat", revision],
         )
-        return merge_file_changes(parse_name_status_output(name_status), parse_numstat_output(numstat))
+        changes = merge_file_changes(parse_name_status_output(name_status), parse_numstat_output(numstat))
+        for change in changes:
+            change.path = change.path.removeprefix("b/")
+            if change.old_path:
+                change.old_path = change.old_path.removeprefix("a/")
+        return changes
     except RuntimeError:
         return []
 
@@ -104,7 +115,7 @@ def extract_files_from_changes(changes: list) -> list[str]:
     for change in changes:
         for path in [getattr(change, "old_path", None), getattr(change, "path", None)]:
             if path and path not in seen:
-                files.append(path)
+                files.append(path.removeprefix("a/").removeprefix("b/"))
                 seen.add(path)
     return files
 
