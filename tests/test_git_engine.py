@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from src.git_engine import build_analysis, get_commit_changes
-from src.impact import detect_change_domains
+from src.impact import detect_domain_findings
 from src.models import FileChange
 
 
@@ -46,6 +46,9 @@ class GitEngineIntegrationTests(unittest.TestCase):
             self.assertIn("hello world.txt", analysis.hotspots)
             self.assertIn("hello renamed.txt", analysis.hotspots)
             self.assertIn("new file.py", analysis.hotspots)
+            self.assertIn("(root)", analysis.changed_areas)
+            self.assertIn("docs", analysis.changed_areas)
+            self.assertEqual(analysis.excluded_files, [])
 
     def test_invalid_revision_range_raises_instead_of_falling_back(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -76,9 +79,8 @@ class GitEngineIntegrationTests(unittest.TestCase):
 
 class ImpactDetectionTests(unittest.TestCase):
     def test_unrelated_filename_does_not_trigger_authentication(self):
-        domains, reasons = detect_change_domains("update author bios", [FileChange(path="src/authors.py")])
-        self.assertEqual(domains, [])
-        self.assertEqual(reasons, [])
+        findings = detect_domain_findings("update author bios", [FileChange(path="src/authors.py")])
+        self.assertEqual(findings, [])
 
 
 if __name__ == "__main__":

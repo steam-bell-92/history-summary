@@ -23,21 +23,49 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument("range", help="Revision range such as HEAD~10..HEAD or main..feature-auth")
     analyze_parser.add_argument("--repo", dest="repo", help="Repository path. Defaults to current directory.")
     analyze_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+    _add_exclude_arguments(analyze_parser)
 
     stats_parser = subparsers.add_parser("stats", help="Show summary statistics for a revision range.")
     stats_parser.add_argument("range", help="Revision range such as HEAD~10..HEAD or main..feature-auth")
     stats_parser.add_argument("--repo", dest="repo", help="Repository path. Defaults to current directory.")
     stats_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+    _add_exclude_arguments(stats_parser)
 
     report_parser = subparsers.add_parser("report", help="Generate a standalone HTML report.")
     report_parser.add_argument("range", help="Revision range such as HEAD~10..HEAD or main..feature-auth")
     report_parser.add_argument("--repo", dest="repo", help="Repository path. Defaults to current directory.")
     report_parser.add_argument("--html", dest="html_path", help="Output file path for the HTML report.")
     report_parser.add_argument("--open", action="store_true", help="Open the generated report in a browser.")
+    _add_exclude_arguments(report_parser)
 
-    version_parser = subparsers.add_parser("version", help="Print the program version.")
+    subparsers.add_parser("version", help="Print the program version.")
 
     return parser
+
+
+def _add_exclude_arguments(subparser: argparse.ArgumentParser) -> None:
+    """Add the shared, transparent generated/build artifact exclusion flags to a subcommand."""
+    subparser.add_argument(
+        "--exclude",
+        dest="exclude_patterns",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help=(
+            "Additional glob pattern to treat as a generated/build artifact and exclude "
+            "from analysis (repeatable). Applied on top of the built-in defaults "
+            "(*.egg-info, build/, dist/, __pycache__, node_modules/, etc.)."
+        ),
+    )
+    subparser.add_argument(
+        "--include-generated",
+        action="store_true",
+        help=(
+            "Do not exclude generated/build artifacts from analysis; treat every changed "
+            "file as substantive. Excluded files are always listed transparently in output "
+            "regardless of this flag -- this only controls whether they're counted."
+        ),
+    )
 
 
 def run_cli(args: argparse.Namespace) -> int:
@@ -52,9 +80,11 @@ def run_cli(args: argparse.Namespace) -> int:
 
         repo_path = normalize_repo_path(getattr(args, "repo", None))
         range_spec = args.range
+        exclude_patterns = getattr(args, "exclude_patterns", [])
+        include_generated = getattr(args, "include_generated", False)
 
         if args.command == "analyze":
-            result = build_analysis(repo_path, range_spec)
+            result = build_analysis(repo_path, range_spec, exclude_patterns, include_generated)
             if getattr(args, "json", False):
                 print(json.dumps(result.as_dict(), indent=2, ensure_ascii=False))
             else:
@@ -62,7 +92,7 @@ def run_cli(args: argparse.Namespace) -> int:
             return 0
 
         if args.command == "stats":
-            result = build_analysis(repo_path, range_spec)
+            result = build_analysis(repo_path, range_spec, exclude_patterns, include_generated)
             if getattr(args, "json", False):
                 print(json.dumps(result.as_dict(), indent=2, ensure_ascii=False))
             else:
@@ -70,7 +100,7 @@ def run_cli(args: argparse.Namespace) -> int:
             return 0
 
         if args.command == "report":
-            result = build_analysis(repo_path, range_spec)
+            result = build_analysis(repo_path, range_spec, exclude_patterns, include_generated)
             output = args.html_path or "reports/history.html"
             output_path = Path(output)
             if not output_path.is_absolute():
@@ -91,20 +121,47 @@ def run_cli(args: argparse.Namespace) -> int:
 
 
 def format_analysis_output(result) -> str:
-    """Format a human-readable narrative analysis."""
-    return (
-        f"Commit count: {result.commit_count}\n"
-        f"Contributors: {', '.join(result.contributors) if result.contributors else 'None'}\n"
-        f"Categories: {result.categories}\n"
-        f"Hotspots: {result.hotspots}\n"
-        f"Summary: {result.summary}\n"
-        f"Impact score: {result.impact_score}\n"
-        f"Impacts: {', '.join(result.impacts) if result.impacts else 'None'}"
-    )
+    """Format a human-readable narrative analysis, keeping facts, detected changes,
+    heuristic interpretation, and potential impact clearly separated."""
+    lines = [
+        f"Commit count: {result.commit_count}",
+        f"Contributors: {', '.join(result.contributors) if result.contributors else 'None'}",
+        f"Categories (detected): {_format_counts(result.categories)}",
+        f"Changed areas (facts): {_format_counts(result.changed_areas)}",
+        f"File hotspots (facts): {_format_counts(result.hotspots)}",
+        "",
+        "What Changed:",
+        f"  {result.summary}",
+        "",
+        "Why It Matters (heuristic interpretation -- may affect, review recommended):",
+    ]
+    if result.domain_findings:
+        for finding in result.domain_findings:
+            evidence = "; ".join(finding.evidence) if finding.evidence else "no evidence recorded"
+            lines.append(f"  - {finding.domain} (confidence: {finding.confidence}) -- {evidence}")
+    else:
+        lines.append("  - No engineering domains were confidently detected from paths or commit messages.")
+    lines.append("")
+    lines.append(f"Potential impact: {result.risk.level} (confidence: {result.risk.confidence})")
+    for reason in result.risk.reasons:
+        lines.append(f"  - {reason}")
+
+    if result.excluded_files:
+        lines.append("")
+        lines.append(
+            f"Excluded generated/build artifacts ({len(result.excluded_files)}) -- "
+            "not counted in the statistics above:"
+        )
+        for excluded in result.excluded_files[:10]:
+            lines.append(f"  - {excluded.path} (matched pattern: {excluded.pattern})")
+        if len(result.excluded_files) > 10:
+            lines.append(f"  ... and {len(result.excluded_files) - 10} more")
+
+    return "\n".join(lines)
 
 
 def format_stats_output(result) -> str:
-    """Format a compact statistics summary."""
+    """Format a compact, fact-only statistics summary."""
     total_additions = sum(commit.insertions for commit in result.commits)
     total_deletions = sum(commit.deletions for commit in result.commits)
     total_files_changed = sum(commit.files_changed for commit in result.commits)
@@ -114,9 +171,19 @@ def format_stats_output(result) -> str:
         f"Additions: {total_additions}",
         f"Deletions: {total_deletions}",
         f"Contributors: {len(result.contributors)}",
-        f"Top categories: {result.categories}",
+        f"Top categories: {_format_counts(result.categories)}",
+        f"Changed areas: {_format_counts(result.changed_areas)}",
     ]
+    if result.excluded_files:
+        lines.append(f"Excluded generated/build artifacts: {len(result.excluded_files)} (not counted above)")
     return "\n".join(lines)
+
+
+def _format_counts(counts: dict[str, int]) -> str:
+    if not counts:
+        return "None"
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return ", ".join(f"{name}: {count}" for name, count in ordered)
 
 
 def should_open_report(args: argparse.Namespace) -> bool:

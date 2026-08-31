@@ -25,6 +25,22 @@ class ClassifierTests(unittest.TestCase):
         result = classify_commit("update author bios", [FileChange(path="src/authors.py")])
         self.assertEqual(result, "Feature")
 
+    def test_build_artifacts_only_commit_is_classified_separately(self):
+        changes = [
+            FileChange(path="gitlens_zero.egg-info/PKG-INFO", is_generated=True, exclude_pattern="*.egg-info/*"),
+            FileChange(path="build/lib/foo.py", is_generated=True, exclude_pattern="build/*"),
+        ]
+        result = classify_commit("chore: regenerate build output", changes)
+        self.assertEqual(result, "Build Artifacts")
+
+    def test_mixed_generated_and_substantive_changes_uses_substantive_only(self):
+        changes = [
+            FileChange(path="gitlens_zero.egg-info/PKG-INFO", is_generated=True, exclude_pattern="*.egg-info/*"),
+            FileChange(path="docs/guide.md", is_generated=False),
+        ]
+        result = classify_commit("update packaging metadata", changes)
+        self.assertEqual(result, "Documentation")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,11 +6,23 @@ from .models import FileChange
 
 
 def classify_commit(message: str, changes: list[FileChange] | str | None = None) -> str:
-    """Assign a commit category using message text, changed paths, and diff shape."""
+    """Assign a commit category using message text, changed paths, and diff shape.
+
+    Files flagged as generated/build artifacts (``FileChange.is_generated``)
+    are excluded from path-based heuristics so that, for example, a commit
+    that only regenerates ``*.egg-info`` isn't misclassified as meaningful
+    "Configuration" work. If every changed file in a commit is a generated
+    artifact, the commit is classified as "Build Artifacts" instead.
+    """
     normalized = message.lower()
     if isinstance(changes, str):
         changes = []
     changes = changes or []
+
+    substantive_changes = [change for change in changes if not getattr(change, "is_generated", False)]
+    if changes and not substantive_changes:
+        return "Build Artifacts"
+    changes = substantive_changes
 
     if any(is_config_path(change.path) or is_config_path(change.old_path or "") for change in changes) or re.search(r"\b(?:config|settings|env|yaml|toml|requirements|docker|deploy|chore|ci|build)\b", normalized):
         return "Configuration"

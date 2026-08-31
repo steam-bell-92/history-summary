@@ -25,7 +25,7 @@
     <div class="grid">
       <div class="metric"><div class="metric-label">Commit count</div><div class="metric-value">{{ commit_count }}</div></div>
       <div class="metric"><div class="metric-label">Contributors</div><div class="metric-value">{{ contributors_count }}</div></div>
-      <div class="metric"><div class="metric-label">Impact score</div><div class="metric-value">{{ impact_score }}/10</div></div>
+      <div class="metric"><div class="metric-label">Potential impact</div><div class="metric-value">{{ risk_level }}</div></div>
       <div class="metric"><div class="metric-label">Hotspots</div><div class="metric-value">{{ hotspots_count }}</div></div>
     </div>
 
@@ -59,8 +59,13 @@
     </div>
 
     <div class="card">
-      <h2>Impact Analysis</h2>
-      <ul>{{ impact_list }}</ul>
+      <h2>Engineering Domains Potentially Affected (heuristic)</h2>
+      <ul>{{ domain_findings_list }}</ul>
+    </div>
+
+    <div class="card">
+      <h2>Why It Matters (potential impact, review recommended)</h2>
+      <ul>{{ risk_reasons_list }}</ul>
     </div>
   </div>
 </body>

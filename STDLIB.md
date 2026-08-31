@@ -1,41 +1,42 @@
 # Standard Library Replacements for Zero-Dependency Git Analysis
 
-This project intentionally avoids third-party packages. Below are the standard library replacements for common patterns used in typical Python tooling.
+This project intentionally avoids third-party packages. The table below
+lists only techniques actually used in `src/` today, matched to the
+common third-party dependency each one replaces, so this file doesn't drift
+from the real implementation.
 
-| Common Dependency | Replacement in This Project | Why it fits |
-| --- | --- | --- |
-| GitPython | subprocess + git CLI | Uses the system Git binary directly without extra runtime packages |
-| Click | argparse | Provides structured CLI parsing and subcommands |
-| Rich | print + plain text formatting | Simple terminal output is enough for this CLI |
-| Jinja2 | string formatting + html.escape | Renders HTML using Python's built-in string templates |
-| Requests | subprocess + git | Git history and repository data is retrieved locally |
-| Pandas | collections.Counter + dict/list | Aggregation and counts are simple and dependency-free |
-| sqlite3 | optional JSON or in-memory collections | Local cache or temporary storage without external dependencies |
-| colorama | ANSI escape code handling via print | Adds terminal style where necessary |
-| watchdog | pathlib + os | Monitors filesystem paths without a library |
-| Flask | CLI-only architecture | No web server is needed for this standalone project |
-| pydantic | dataclasses | Type-safe models without the dependency |
-| pytest | unittest | Built-in testing framework for core assertions |
-| loguru | logging | Standard log support fits the project needs |
-| toml | tomllib | Parses TOML configuration in Python 3.11+ |
-| dateutil | datetime | Manages time parsing and formatting via stdlib |
-| yaml | json + custom parsing | Git metadata and reports are simple enough for JSON/XML output |
-| httpx | urllib | Local or remote HTTP needs can be handled with stdlib |
-| numpy | statistics + collections | Basic statistics and counting can be implemented without numpy |
+| Common Dependency | Replacement actually used here | Where | Why it fits |
+| --- | --- | --- | --- |
+| GitPython | `subprocess.run(["git", ...], capture_output=True, text=True)` | `src/utils.py` | Uses the system Git binary directly, no extra runtime package |
+| Click | `argparse.ArgumentParser` + `add_subparsers()` | `src/cli.py` | Structured CLI parsing and subcommands (`analyze`, `stats`, `report`, `version`) |
+| Rich | `print()` with fixed text blocks | `src/cli.py` | Plain, readable terminal output is enough for this CLI |
+| Jinja2 | Python string formatting + `html.escape` | `src/html_report.py` | Renders the HTML report using f-strings and built-in escaping, no template engine |
+| Pandas | `collections.Counter` / `dict` / sorted `list` comprehensions | `src/git_engine.py`, `src/summary.py`, `src/html_report.py` | Aggregation and counting (categories, hotspots, changed areas, contributors) is simple enough without a dataframe library |
+| Flask | CLI-only architecture | `src/cli.py`, `src/main.py` | No web server is needed; the HTML report is a static file |
+| pydantic | `dataclasses.dataclass(slots=True)` | `src/models.py` | Typed, memory-efficient models (`Commit`, `FileChange`, `DomainFinding`, `RiskAssessment`, `ExcludedFile`, `AnalysisResult`) without the dependency |
+| pytest | `unittest.TestCase` + `unittest.main()` | `tests/` | Built-in testing framework for all unit and scenario tests |
+| pathspec / gitignore-parser | `fnmatch.fnmatch` against normalized paths and path segments | `src/excludes.py` | Matches generated/build artifact patterns (`*.egg-info`, `build/`, `dist/`, `__pycache__`, etc.) without a gitignore-style parsing library |
+| simplejson | `json.dumps(result.as_dict(), indent=2, ensure_ascii=False)` | `src/cli.py` | Machine-readable output behind the `--json` flag |
+| `open`-in-browser helpers | `webbrowser.open(path.as_uri())` | `src/cli.py` | Opens the generated HTML report in the user's default browser behind `--open` |
 
 ## Notable substitutions
 
-1. GitPython -> subprocess.run([...], capture_output=True, text=True)
-2. Click -> argparse.ArgumentParser and add_subparsers()
-3. Rich -> print() with fixed text blocks
-4. Jinja2 -> string.Template or format() with html.escape
-5. Pandas -> Counter, defaultdict, and dictionary-based aggregation
-6. Requests -> urllib.request for HTTP interactions (if needed)
-7. Flask -> command-line entrypoints and static HTML output
-8. PyYAML -> json.loads() / custom parsers for simple config
-9. pydantic -> dataclasses.dataclass
-10. pytest -> unittest.TestCase and unittest.main()
-11. colorama -> ANSI sequences defined directly in code
-12. watchfiles -> os.walk + pathlib.Path.rglob
+1. GitPython -> `subprocess.run([...], capture_output=True, text=True)` for every Git query (`log`, `diff-tree --name-status`, `diff-tree --numstat`, `rev-list --count`, `status`)
+2. Click -> `argparse.ArgumentParser` and `add_subparsers()`
+3. Rich -> `print()` with fixed text blocks
+4. Jinja2 -> f-strings + `html.escape()` for the HTML report (`src/html_report.py`)
+5. Pandas -> `collections.Counter`, plain `dict`, and sorted comprehensions
+6. Flask -> command-line entry points and a static HTML file as output
+7. pydantic -> `dataclasses.dataclass(slots=True)`
+8. pytest -> `unittest.TestCase` and `unittest.main()`
+9. pathspec -> `fnmatch.fnmatch` for generated/build artifact matching
+10. simplejson -> `json` from the standard library
+11. Structured Git parsing uses `\x1e`/`\x1f`/`\x00` (record/field/null) separators parsed with `str.split()` and `re`, instead of a Git-log-parsing library
+12. Path tokenization for domain/category detection uses `re.split(r"[^a-z0-9]+", ...)` on lowercased, camelCase-split text instead of an NLP tokenizer
 
-This approach keeps the project portable, transparent, and compliant with the zero-dependency requirement.
+## Note on accuracy
+
+This table is kept in sync with the actual imports in `src/`. If a
+substitution is added or removed, this file is updated in the same change so
+it never drifts from the implementation. Run `grep -rhn "^import \|^from " src/`
+to check current imports against this table.
