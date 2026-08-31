@@ -75,7 +75,7 @@ classification, and domain analysis **by default**, but never silently:
 - Range-based analysis: `HEAD~10..HEAD`, `main..feature-auth`, and similar Git revision ranges
 - Commit statistics for additions, deletions, and files changed
 - Contributor identification across the selected history window
-- Commit classification into Feature, Bug Fix, Refactor, Documentation, Test, Configuration, Security, and Build Artifacts
+- Commit classification into Feature, Bug Fix, Refactor, Documentation, Test, Configuration, Security, and HEADBuild Artifacts
 - Heuristic engineering-domain detection for Authentication, Database, API, Frontend, Tests, and Documentation, each with evidence and a confidence level
 - A qualitative, explainable Low/Medium/High potential-impact rating (see formula above) instead of an opaque numeric score
 - Transparent generated/build artifact detection with a documented, overridable exclusion mechanism
@@ -91,19 +91,19 @@ classification, and domain analysis **by default**, but never silently:
 4. Run the CLI as follows:
 
 ```bash
-python -m src.main analyze HEAD~10..HEAD
+python -m src.main analyze HEAD~3..
 python -m src.main stats main..feature-auth
-python -m src.main report HEAD~10..HEAD --html reports/history.html
+python -m src.main report HEAD~3..HEAD --html reports/history.html
 python -m src.main version
 ```
 
 ## Usage Examples
 
 ```bash
-gitlens analyze HEAD~10..HEAD
-gitlens analyze HEAD~10..HEAD --json
-gitlens analyze HEAD~10..HEAD --exclude "*.generated.json"
-gitlens analyze HEAD~10..HEAD --include-generated
+gitlens analyze HEAD~3..HEAD
+gitlens analyze HEAD~3..HEAD --json
+gitlens analyze HEAD~3..HEAD --exclude "*.generated.json"
+gitlens analyze HEAD~3..HEAD --include-generated
 gitlens stats main..feature-auth
 gitlens report main..feature-auth --html reports/history.html --open
 gitlens version
