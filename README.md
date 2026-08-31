@@ -131,7 +131,7 @@ Classifier (Detected changes)              Impact Engine (Heuristic domains + Po
 
 ## Screenshots Placeholder
 
-![GitLens Zero Dashboard Placeholder](https://placehold.co/1200x800/111827/ffffff?text=GitLens+Zero+Dashboard)
+![GitLens Zero Dashboard Placeholder](https://github.com/steam-bell-92/history-summary/blob/1e124e4f8f48fb09478a2dbaaa38f779d195c669/git.png)
 
 ## Zero Dependency Explanation
 
